@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Subway Surfer (Top-Down)</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #222;
+            margin: 0;
+        }
+        #gameContainer {
+            background: #f0f0f0;
+            border: 4px solid #333;
+            border-radius: 12px;
+            position: relative;
+        }
+        #score {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            font-size: 1.2em;
+            color: #333;
+            z-index: 2;
+            font-family: Arial, sans-serif;
+        }
+        #gameOver {
+            position: absolute;
+            width: 100%;
+            top: 40%;
+            left: 0;
+            text-align: center;
+            font-size: 2em;
+            color: #d32f2f;
+            font-family: Arial, sans-serif;
+            z-index: 3;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="360" height="600"></canvas>
+    <div id="score">Score: 0</div>
+    <div id="gameOver">Game Over!<br>Press R to Restart</div>
+</div>
+<script>
+// Game constants
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const laneCount = 3;
+const laneWidth = canvas.width / laneCount;
+const playerY = canvas.height - 90; // fixed vertical position
+const playerSize = 48; // emoji size
+const playerEmoji = '🧑';
+const coinEmoji = '🪙';
+const obstacleColor = '#555';
+const coinSize = 32;
+const obstacleWidth = laneWidth * 0.7;
+const obstacleHeight = 36;
+const coinHeight = 24;
+const spawnInterval = 900; // ms
+const coinSpawnChance = 0.4; // 40% chance to spawn a coin instead of obstacle
+const gameSpeed = 3.5; // pixels per frame
+
+// Game state
+let playerLane = 1; // 0 = left, 1 = middle, 2 = right
+let obstacles = [];
+let coins = [];
+let score = 0;
+let distance = 0;
+let gameOver = false;
+let lastSpawn = 0;
+
+function resetGame() {
+    playerLane = 1;
+    obstacles = [];
+    coins = [];
+    score = 0;
+    distance = 0;
+    gameOver = false;
+    lastSpawn = 0;
+    document.getElementById('gameOver').style.display = 'none';
+    document.getElementById('score').textContent = 'Score: 0';
+    window.requestAnimationFrame(gameLoop);
+}
+
+function drawPlayer() {
+    const x = laneWidth * playerLane + laneWidth / 2;
+    ctx.font = playerSize + 'px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(playerEmoji, x, playerY + playerSize / 3);
+}
+
+function drawObstacles() {
+    ctx.fillStyle = obstacleColor;
+    obstacles.forEach(ob => {
+        const x = laneWidth * ob.lane + (laneWidth - obstacleWidth) / 2;
+        ctx.fillRect(x, ob.y, obstacleWidth, obstacleHeight);
+    });
+}
+
+function drawCoins() {
+    ctx.font = coinSize + 'px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    coins.forEach(coin => {
+        const x = laneWidth * coin.lane + laneWidth / 2;
+        ctx.fillText(coinEmoji, x, coin.y + coinHeight / 2);
+    });
+}
+
+function spawnObstacleOrCoin() {
+    const lane = Math.floor(Math.random() * laneCount);
+    if (Math.random() < coinSpawnChance) {
+        coins.push({ lane: lane, y: -coinHeight });
+    } else {
+        obstacles.push({ lane: lane, y: -obstacleHeight });
+    }
+}
+
+function updateObstaclesAndCoins() {
+    // Move obstacles
+    obstacles.forEach(ob => ob.y += gameSpeed);
+    obstacles = obstacles.filter(ob => ob.y < canvas.height);
+    // Move coins
+    coins.forEach(coin => coin.y += gameSpeed);
+    coins = coins.filter(coin => coin.y < canvas.height);
+}
+
+function checkCollisions() {
+    // Check obstacle collision
+    for (let ob of obstacles) {
+        if (ob.lane === playerLane &&
+            ob.y + obstacleHeight > playerY &&
+            ob.y < playerY + playerSize * 0.7) {
+            return true;
+        }
+    }
+    // Check coin collision
+    for (let i = 0; i < coins.length; i++) {
+        const coin = coins[i];
+        if (coin.lane === playerLane &&
+            coin.y + coinHeight > playerY &&
+            coin.y < playerY + playerSize * 0.7) {
+            coins.splice(i, 1);
+            score += 10;
+            document.getElementById('score').textContent = 'Score: ' + (score + Math.floor(distance / 10));
+            break;
+        }
+    }
+    return false;
+}
+
+function drawLanes() {
+    ctx.strokeStyle = '#bbb';
+    ctx.lineWidth = 2;
+    for (let i = 1; i < laneCount; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * laneWidth, 0);
+        ctx.lineTo(i * laneWidth, canvas.height);
+        ctx.stroke();
+    }
+}
+
+function gameLoop(timestamp) {
+    if (gameOver) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawLanes();
+    drawObstacles();
+    drawCoins();
+    drawPlayer();
+
+    // Spawn obstacles/coins
+    if (!lastSpawn || timestamp - lastSpawn > spawnInterval) {
+        spawnObstacleOrCoin();
+        lastSpawn = timestamp;
+    }
+
+    updateObstaclesAndCoins();
+    distance += gameSpeed;
+    document.getElementById('score').textContent = 'Score: ' + (score + Math.floor(distance / 10));
+
+    if (checkCollisions()) {
+        gameOver = true;
+        document.getElementById('gameOver').style.display = 'block';
+        return;
+    }
+    window.requestAnimationFrame(gameLoop);
+}
+
+// Controls
+window.addEventListener('keydown', (e) => {
+    if (gameOver && e.key.toLowerCase() === 'r') {
+        resetGame();
+        return;
+    }
+    if (gameOver) return;
+    if (e.key === 'ArrowLeft' && playerLane > 0) {
+        playerLane--;
+    } else if (e.key === 'ArrowRight' && playerLane < laneCount - 1) {
+        playerLane++;
+    }
+});
+
+// Start the game
+resetGame();
+</script>
+</body>
+</html>
